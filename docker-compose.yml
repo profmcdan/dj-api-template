@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  api: &api
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    image: profmcdan/django-api
+    command: gunicorn -w 4 core.wsgi -b 0.0.0.0:8000 --timeout 420
+    volumes:
+      - ./app:/app
+    ports:
+      - "8006:8000"
+    env_file:
+      - ./.env
+    restart: always
+
+  celery:
+    <<: *api
+    command: celery -A core.celery worker --pool=threads --loglevel=info --logfile=logs/celery.log
+    ports: [ ]
+    volumes:
+      - ./app:/app
+    env_file:
+      - ./.env
+    depends_on:
+      - api
+
+  celery-beat:
+    <<: *api
+    command: celery -A core beat -l info
+    ports: [ ]
+    volumes:
+      - ./app:/app
+    env_file:
+      - ./.env
+    depends_on:
+      - celery
+
+  dashboard:
+    <<: *api
+    command: celery --broker=${REDIS_URL} flower --port=5555
+    ports:
+      - "25559:5555"
+    env_file:
+      - ./.env
+    depends_on:
+      - api
+      - celery
